@@ -1,15 +1,16 @@
 # Trade Health Tracker를 윈도우 작업 스케줄러에 등록한다.
-# 로그온 시 scripts\start.ps1 을 실행 — GitHub에서 업데이트를 확인해 있으면 pull한 뒤 서버를 띄운다.
+# 로그온 시 scripts\start-hidden.vbs 를 실행 — vbs가 콘솔 없이 start.ps1을 띄우고,
+# start.ps1이 업데이트 확인 후 서버를 시작한다. (node.exe 콘솔 창이 안 뜨게 하려는 래핑)
 # 프로젝트 경로를 하드코딩하지 않고 이 스크립트 자신의 위치를 기준으로 잡아서,
 # 폴더를 어디로 옮겨도(다른 PC로 복사해도) 그대로 다시 실행하면 된다.
 
 $ErrorActionPreference = 'Stop'
 $TaskName = 'TradeHealthTracker'
 $ProjectDir = Split-Path -Parent $PSScriptRoot
-$StartScript = Join-Path $ProjectDir 'scripts\start.ps1'
+$VbsScript = Join-Path $ProjectDir 'scripts\start-hidden.vbs'
 
-if (-not (Test-Path $StartScript)) {
-    Write-Error "start.ps1을 찾을 수 없습니다: $StartScript`n이 스크립트는 프로젝트 폴더 안의 scripts\install-task.ps1 위치 그대로 실행해야 합니다."
+if (-not (Test-Path $VbsScript)) {
+    Write-Error "start-hidden.vbs를 찾을 수 없습니다: $VbsScript`n이 스크립트는 프로젝트 폴더 안의 scripts\install-task.ps1 위치 그대로 실행해야 합니다."
     exit 1
 }
 
@@ -22,9 +23,9 @@ if (-not $NodeCmd) {
 Write-Host "Node.js: $($NodeCmd.Source)"
 Write-Host "Project: $ProjectDir"
 
-# 로그온 시 start.ps1을 숨김 창으로 실행(자동 업데이트 확인 → 서버 시작).
+# 로그온 시 wscript로 start-hidden.vbs 실행 → 콘솔 창 없이 서버 시작(자동 업데이트 포함).
 # 이미 등록돼 있으면 덮어쓰기(/F) — 몇 번을 다시 실행해도 안전.
-$Action = "powershell.exe -ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File `"$StartScript`""
+$Action = "wscript.exe //B `"$VbsScript`""
 schtasks /create /tn $TaskName /tr $Action /sc onlogon /rl limited /f
 
 if ($LASTEXITCODE -ne 0) {

@@ -306,7 +306,8 @@ function makePowScale(id, exp) {
 }
 
 const HIST_Y_POWER = 0.75; // 히스토그램 카운트 y축 압축 (3/4=0.75, 7/8=0.875, sqrt=0.5, linear=1)
-const HOLD_POWER   = 0.5;  // 홀딩타임 x축/bin 압축 — 긴 보유시간 아웃라이어가 극단적이라 더 세게
+const HOLD_POWER   = 0.5;  // 홀딩타임 x축 압축 — 긴 보유시간 아웃라이어가 극단적이라 더 세게
+const RPH_POWER    = 0.5;  // RPH 분포 bin 압축 — 아주 짧은 홀드의 극단 RPH 아웃라이어 완화(부호 유지)
 let HIST_Y_TYPE = 'linear'; // 히스토그램 카운트 y축 스케일 타입
 let HOLD_X_TYPE = 'linear'; // 홀딩타임 산점도 x축 스케일 타입
 try {
@@ -798,9 +799,11 @@ function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win, binP
   const vals = points.map(valueOf);
   const min = Math.min(...vals), max = Math.max(...vals);
   const binCount = 90;
+  // 부호 유지 대칭 거듭제곱 sign(v)·|v|^P — 음수(손실 RPH 등)도 대칭으로 압축, 0이 그대로 0.
   const useP = binPower !== 1;
-  const tf = v => useP ? Math.pow(Math.max(0, v), binPower) : v;       // 값 → 변환공간
-  const inv = t => useP ? Math.pow(Math.max(0, t), 1 / binPower) : t;  // 변환공간 → 값(라벨용)
+  const sgnPow = (v, p) => (v < 0 ? -1 : 1) * Math.pow(Math.abs(v), p);
+  const tf = v => useP ? sgnPow(v, binPower) : v;      // 값 → 변환공간
+  const inv = t => useP ? sgnPow(t, 1 / binPower) : t; // 변환공간 → 값(라벨용)
   const tmin = tf(min), tmax = tf(max);
   const binSize = (tmax - tmin) / binCount || 1;
   const winBins = new Array(binCount).fill(0);
@@ -860,7 +863,7 @@ function renderRphHistChart(closes) {
   const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
   const points = allClosePoints(closes)
     .filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl && Number.isFinite(p.rph));
-  renderHistogram('chartHoldHist', points, p => p.rph, v => fmt(v, 1) + '/h');
+  renderHistogram('chartHoldHist', points, p => p.rph, v => fmt(v, 1) + '/h', p => p.win, RPH_POWER);
 }
 
 // Net PNL(수수료 차감) 분포. 승/패는 net 부호 기준.

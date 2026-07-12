@@ -750,7 +750,7 @@ function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win) {
   if (!points.length) { makeChart(id, { type: 'bar', data: { labels: [], datasets: [] } }); return; }
   const vals = points.map(valueOf);
   const min = Math.min(...vals), max = Math.max(...vals);
-  const binCount = 30;
+  const binCount = 90;
   const binSize = (max - min) / binCount || 1;
   const winBins = new Array(binCount).fill(0);
   const lossBins = new Array(binCount).fill(0);
@@ -776,7 +776,9 @@ function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win) {
       plugins: { legend: { labels: { color: '#6b7280' } } },
       scales: {
         x: { stacked: true, ticks: { color: '#4b5563', maxTicksLimit: 15 }, grid: { color: '#9ca3af80' } },
-        y: { stacked: true, ticks: { color: '#4b5563' }, beginAtZero: true, grid: { color: '#9ca3af80' } },
+        // 로그 스케일 — bin이 잘아지면 카운트 적은 구간이 많아지는데, 선형이면 큰 막대에 눌려
+        // 안 보임. 로그로 하면 1·2개짜리 꼬리도 드러남. (log는 0을 못 그려서 beginAtZero 제거)
+        y: { stacked: true, type: 'logarithmic', ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
       },
     },
   });

@@ -280,37 +280,41 @@ if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
   Chart.defaults.plugins.datalabels = { display: false };
 }
 
-// 카운트 히스토그램용 거듭제곱(power) y축. 로그축은 막대에 "0 바닥"이 없어(log0=-∞) 카운트
-// 1개가 붕 떠 보이는데, y = value^P 는 0이 진짜 바닥이라 적은 카운트는 아래에 붙는다.
-// P는 압축 정도: 0.5(=sqrt)면 작은 카운트를 많이 부각(1이 큼), 1이면 linear(부각 없음).
-// 0.5와 1 사이(예: 0.75=3/4, 0.875=7/8)로 두면 꼬리는 보이되 1이 과하게 크진 않다.
-// (로그의 밑은 모양에 영향 없음 — 축이 min~max로 정규화되며 상쇄되므로.)
-// LogarithmicScale과 같은 패턴으로 getPixelForValue/getValueForPixel만 갈아끼움.
-// 등록 실패 시 HIST_Y_TYPE이 'linear'로 남아 안전하게 폴백.
-const HIST_Y_POWER = 0.75; // ← 여기만 바꾸면 됨 (3/4=0.75, 7/8=0.875, sqrt=0.5, linear=1)
-let HIST_Y_TYPE = 'linear';
+// 거듭제곱(power) 스케일 y = value^P. 로그축은 막대에 "0 바닥"이 없어(log0=-∞) 카운트 1개가
+// 붕 떠 보이는데, power는 0이 진짜 바닥이라 적은 값은 아래에 붙고 큰 값(아웃라이어)은 눌린다.
+// P는 압축 정도: 0.5(=sqrt)가 가장 세고, 1이면 linear(압축 없음). (로그의 밑은 모양에 영향 없음.)
+// exponent별로 스케일을 하나씩 등록해서 쓴다(카운트 y축 vs 홀딩타임 x축을 따로 튜닝 가능).
+function makePowScale(id, exp) {
+  const P = exp, INV_P = 1 / exp;
+  const tf = v => Math.pow(Math.max(0, v == null || isNaN(v) ? 0 : v), P);
+  class PowScale extends Chart.LinearScale {
+    getPixelForValue(value) {
+      const a = tf(this.min), b = tf(this.max);
+      const decimal = b === a ? 0 : (tf(value) - a) / (b - a);
+      return this.getPixelForDecimal(decimal);
+    }
+    getValueForPixel(pixel) {
+      const a = tf(this.min), b = tf(this.max);
+      const t = a + this.getDecimalForPixel(pixel) * (b - a);
+      return Math.pow(Math.max(0, t), INV_P);
+    }
+  }
+  PowScale.id = id;
+  PowScale.defaults = Chart.LinearScale.defaults;
+  Chart.register(PowScale);
+  return id;
+}
+
+const HIST_Y_POWER = 0.75; // 히스토그램 카운트 y축 압축 (3/4=0.75, 7/8=0.875, sqrt=0.5, linear=1)
+const HOLD_POWER   = 0.5;  // 홀딩타임 x축/bin 압축 — 긴 보유시간 아웃라이어가 극단적이라 더 세게
+let HIST_Y_TYPE = 'linear'; // 히스토그램 카운트 y축 스케일 타입
+let HOLD_X_TYPE = 'linear'; // 홀딩타임 산점도 x축 스케일 타입
 try {
   if (typeof Chart !== 'undefined' && Chart.LinearScale) {
-    const P = HIST_Y_POWER, INV_P = 1 / HIST_Y_POWER;
-    const pow = v => Math.pow(Math.max(0, v == null || isNaN(v) ? 0 : v), P);
-    class PowScale extends Chart.LinearScale {
-      getPixelForValue(value) {
-        const tmin = pow(this.min), tmax = pow(this.max);
-        const decimal = tmax === tmin ? 0 : (pow(value) - tmin) / (tmax - tmin);
-        return this.getPixelForDecimal(decimal);
-      }
-      getValueForPixel(pixel) {
-        const tmin = pow(this.min), tmax = pow(this.max);
-        const t = tmin + this.getDecimalForPixel(pixel) * (tmax - tmin);
-        return Math.pow(Math.max(0, t), INV_P);
-      }
-    }
-    PowScale.id = 'pow';
-    PowScale.defaults = Chart.LinearScale.defaults;
-    Chart.register(PowScale);
-    HIST_Y_TYPE = 'pow';
+    HIST_Y_TYPE = makePowScale('powCount', HIST_Y_POWER);
+    HOLD_X_TYPE = makePowScale('powHold', HOLD_POWER);
   }
-} catch (e) { console.warn('pow scale 등록 실패 — linear로 폴백', e); HIST_Y_TYPE = 'linear'; }
+} catch (e) { console.warn('pow scale 등록 실패 — linear로 폴백', e); HIST_Y_TYPE = 'linear'; HOLD_X_TYPE = 'linear'; }
 
 const charts = {};
 const fmt = (v, d=4) => Number(v||0).toFixed(d);
@@ -651,20 +655,27 @@ function buildRefLineDatasets(points, opts) {
     },
   });
   // 대각선(비율): 원점 지나는 기울기 = slopeOf(ratioVal). 사이즈축은 %/100, 시간축은 $/h.
-  const dLine = (label, ratioVal, color, dash, alpha = 1) => ({
-    type: 'line', label,
-    data: [{ x: 0, y: 0 }, { x: maxX, y: slopeOf(ratioVal) * maxX }],
-    borderColor: alpha < 1 ? color + Math.round(alpha * 255).toString(16).padStart(2, '0') : color,
-    borderWidth: 0.3, borderDash: dash.length ? dash : [1, 3], // 값선과 시각적으로 구분되게 항상 도트 계열
-    pointRadius: 0, fill: false, tension: 0,
-    datalabels: {
-      display: ctx => ctx.dataIndex === 1,
-      align: 'start', anchor: 'end', offset: 4,
-      color: alpha < 1 ? color + '99' : color,
-      font: { size: 10, style: 'italic' },
-      formatter: () => ratioFmt(ratioVal),
-    },
-  });
+  // x축이 비선형(거듭제곱)일 수 있어서 직선이 곡선으로 보여야 하므로 여러 점으로 촘촘히 샘플링.
+  // (선형 x축에선 점들이 일직선이라 시각적으로 동일 — 안전.)
+  const D_SEG = 32;
+  const dLine = (label, ratioVal, color, dash, alpha = 1) => {
+    const slope = slopeOf(ratioVal);
+    const data = [];
+    for (let i = 0; i <= D_SEG; i++) { const x = maxX * i / D_SEG; data.push({ x, y: slope * x }); }
+    return {
+      type: 'line', label, data,
+      borderColor: alpha < 1 ? color + Math.round(alpha * 255).toString(16).padStart(2, '0') : color,
+      borderWidth: 0.3, borderDash: dash.length ? dash : [1, 3], // 값선과 시각적으로 구분되게 항상 도트 계열
+      pointRadius: 0, fill: false, tension: 0,
+      datalabels: {
+        display: ctx => ctx.dataIndex === D_SEG,
+        align: 'start', anchor: 'end', offset: 4,
+        color: alpha < 1 ? color + '99' : color,
+        font: { size: 10, style: 'italic' },
+        formatter: () => ratioFmt(ratioVal),
+      },
+    };
+  };
   const out = [];
   for (const d of statDefs) {
     const valueOn = document.querySelector(`.${selector}[data-metric="value"][data-stat="${d.stat}"]`)?.checked;
@@ -744,11 +755,12 @@ function fitBounds(pts) {
   const yMin = Math.min(...ys), yMax = Math.max(...ys);
   const xPad = (xMax - xMin) * 0.04 || 1;
   const yPad = (yMax - yMin) * 0.04 || 1;
-  return { x: { min: xMin - xPad, max: xMax + xPad }, y: { min: yMin - yPad, max: yMax + yPad } };
+  // x(사이즈·보유시간)는 음수가 없으므로 왼쪽 여백이 0 밑으로 가지 않게 클램프(거듭제곱 x축에서도 안전).
+  return { x: { min: Math.max(0, xMin - xPad), max: xMax + xPad }, y: { min: yMin - yPad, max: yMax + yPad } };
 }
 
 // 산점도 하나 그리기(win/loss 색분리, 줌/팬). Net PNL vs (사이즈|보유시간) 공용.
-function renderScatter(id, wins, losses, xTitle, xTip, extraDatasets = []) {
+function renderScatter(id, wins, losses, xTitle, xTip, extraDatasets = [], xType = 'linear') {
   const b = fitBounds([...wins, ...losses]);
   makeChart(id, {
     type: 'scatter',
@@ -770,7 +782,7 @@ function renderScatter(id, wins, losses, xTitle, xTip, extraDatasets = []) {
         },
       },
       scales: {
-        x: { min: b.x.min, max: b.x.max, title: { display: true, text: xTitle, color: '#4b5563' }, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
+        x: { type: xType, min: b.x.min, max: b.x.max, title: { display: true, text: xTitle, color: '#4b5563' }, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
         y: { min: b.y.min, max: b.y.max, title: { display: true, text: 'Net PNL', color: '#4b5563' }, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
       },
     },
@@ -779,21 +791,27 @@ function renderScatter(id, wins, losses, xTitle, xTip, extraDatasets = []) {
 
 // win/loss 스택 히스토그램 하나 그리기. valueOf로 비닝 대상을, labelFmt로 x축 라벨을 결정.
 // winOf로 승/패 색분리 기준을 결정(기본은 net 기준 p.win — PNL 분포는 자기 값의 부호로 나눔).
-function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win) {
+// binPower<1이면 값 공간이 아니라 value^binPower 공간에서 균등 분할한다 → 큰 값일수록 bin이
+// 넓어짐(홀딩타임처럼 긴 아웃라이어 구간은 성기게, 짧은 구간은 촘촘히). 음수 값엔 안 씀(기본 1).
+function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win, binPower = 1) {
   if (!points.length) { makeChart(id, { type: 'bar', data: { labels: [], datasets: [] } }); return; }
   const vals = points.map(valueOf);
   const min = Math.min(...vals), max = Math.max(...vals);
   const binCount = 90;
-  const binSize = (max - min) / binCount || 1;
+  const useP = binPower !== 1;
+  const tf = v => useP ? Math.pow(Math.max(0, v), binPower) : v;       // 값 → 변환공간
+  const inv = t => useP ? Math.pow(Math.max(0, t), 1 / binPower) : t;  // 변환공간 → 값(라벨용)
+  const tmin = tf(min), tmax = tf(max);
+  const binSize = (tmax - tmin) / binCount || 1;
   const winBins = new Array(binCount).fill(0);
   const lossBins = new Array(binCount).fill(0);
   for (const p of points) {
-    let idx = Math.floor((valueOf(p) - min) / binSize);
+    let idx = Math.floor((tf(valueOf(p)) - tmin) / binSize);
     if (idx >= binCount) idx = binCount - 1;
     if (idx < 0) idx = 0;
     if (winOf(p)) winBins[idx]++; else lossBins[idx]++;
   }
-  const labels = winBins.map((_, i) => labelFmt(min + i * binSize));
+  const labels = winBins.map((_, i) => labelFmt(inv(tmin + i * binSize)));
   makeChart(id, {
     type: 'bar',
     data: {
@@ -827,7 +845,7 @@ function renderHoldTimeChart(closes) {
   const losses = points.filter(p => !p.win).map(p => ({ x: p.holdH, y: p.y, rph: p.rph }));
   const refLines = buildRefLineDatasets(refPoints, { selector: 'refline-hold', ratioField: 'rph', slopeOf: v => v, ratioFmt: v => `${fmt(v, 2)}/h` });
   renderScatter('chartHoldTime', wins, losses, 'Holding Time (h)',
-    r => `hold ${fmtHours(r.x)} / pnl ${fmt(r.y)} (${fmt(r.rph, 2)}/h)`, refLines);
+    r => `hold ${fmtHours(r.x)} / pnl ${fmt(r.y)} (${fmt(r.rph, 2)}/h)`, refLines, HOLD_X_TYPE);
 }
 
 function renderReturnHistChart(closes) {
@@ -839,7 +857,7 @@ function renderReturnHistChart(closes) {
 function renderHoldHistChart(closes) {
   const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
   const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
-  renderHistogram('chartHoldHist', points, p => p.holdH, v => fmtHours(v));
+  renderHistogram('chartHoldHist', points, p => p.holdH, v => fmtHours(v), p => p.win, HOLD_POWER);
 }
 
 // Net PNL(수수료 차감) 분포. 승/패는 net 부호 기준.

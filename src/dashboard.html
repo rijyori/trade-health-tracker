@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trade Health Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<style>
+  :root { --bg: #f8f9fa; --card: #ffffff; --border: #e0e3e8; --text: #1a1d27; --dim: #6b7280; --green: #16a34a; --red: #dc2626; --blue: #2563eb; --yellow: #ca8a04; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 24px; font-size: 15px; }
+  h1 { font-size: 1.6rem; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .card h3 { font-size: 0.85rem; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+  .card .value { font-size: 1.7rem; font-weight: 700; }
+  .card .sub { font-size: 0.9rem; color: var(--dim); margin-top: 4px; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .chart-box h3 { font-size: 1rem; color: var(--dim); margin-bottom: 12px; }
+  .chart-box canvas { width: 100% !important; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  th, td { padding: 10px 12px; text-align: right; border-bottom: 1px solid var(--border); }
+  th { color: var(--dim); font-weight: 600; text-transform: uppercase; font-size: 0.8rem; }
+  td:first-child, th:first-child { text-align: left; }
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .section h3 { font-size: 1rem; color: var(--dim); margin-bottom: 12px; }
+  .refresh-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .refresh-bar span { font-size: 0.85rem; color: var(--dim); }
+  button { background: var(--blue); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+  button:disabled:hover { opacity: 0.3; }
+  .tf-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tf-check { display: none; }
+  .tf-tag { display: inline-block; padding: 5px 10px; border-radius: 4px; font-size: 0.85rem; border: 1px solid var(--border); color: var(--dim); cursor: pointer; user-select: none; transition: all 0.15s; }
+  .tf-check:checked + .tf-tag { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .tf-tag:hover { border-color: var(--blue); }
+  .filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 16px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .filter-label { font-size: 0.85rem; color: var(--dim); text-transform: uppercase; margin-bottom: 6px; }
+  .acct-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .acct-check { display: none; }
+  .acct-tag { display: inline-block; padding: 5px 12px; border-radius: 4px; font-size: 0.9rem; border: 1px solid var(--border); color: var(--dim); cursor: pointer; user-select: none; transition: all 0.15s; }
+  .acct-check:checked + .acct-tag { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .acct-tag:hover { border-color: var(--blue); }
+  .inst-group { display: flex; flex-wrap: wrap; gap: 6px; max-width: 420px; }
+  .inst-check { display: none; }
+  .inst-tag { display: inline-block; padding: 5px 12px; border-radius: 4px; font-size: 0.9rem; border: 1px solid var(--border); color: var(--dim); cursor: pointer; user-select: none; transition: all 0.15s; }
+  .inst-check:checked + .inst-tag { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .inst-tag:hover { border-color: var(--blue); }
+  .cal-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 5px; }
+  .cal-header span { text-align: center; font-size: 0.8rem; color: var(--dim); text-transform: uppercase; font-weight: 600; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .cal-cell { aspect-ratio: 1; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.85rem; position: relative; cursor: default; border: 1px solid transparent; }
+  .cal-cell:hover { border-color: var(--blue); }
+  .cal-cell .cal-day { font-size: 0.8rem; color: var(--dim); margin-bottom: 2px; font-weight: 600; }
+  .cal-cell .cal-val { font-weight: 700; font-size: 0.95rem; }
+  .cal-cell .cal-orders { font-size: 0.7rem; color: var(--dim); margin-top: 2px; }
+  .cal-cell.empty { background: var(--bg); border: 1px solid var(--border); }
+  .cal-cell.win { background: rgba(22,163,74,0.1); }
+  .cal-cell.loss { background: rgba(220,38,38,0.1); }
+  .cal-cell.zero { background: var(--bg); border: 1px solid var(--border); }
+  .cal-cell.today { border-color: var(--blue); border-width: 2px; }
+  .cal-cell.other-month { opacity: 0.4; }
+  @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+  .gear-btn { background: none; border: 1px solid var(--border); color: var(--dim); width: 34px; height: 34px; border-radius: 6px; font-size: 1.1rem; padding: 0; line-height: 1; }
+  .gear-btn:hover { opacity: 1; border-color: var(--blue); color: var(--blue); }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); align-items: center; justify-content: center; z-index: 100; }
+  .modal-overlay.open { display: flex; }
+  .modal-box { background: var(--card); border-radius: 10px; padding: 24px; width: 420px; max-width: 90vw; max-height: 85vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+  .modal-box h2 { font-size: 1.15rem; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .modal-close { cursor: pointer; color: var(--dim); font-size: 1.2rem; background: none; border: none; padding: 0 4px; }
+  .acct-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  .acct-row .acct-info { display: flex; flex-direction: column; }
+  .acct-row .acct-info .lbl { font-weight: 600; }
+  .acct-row .acct-info .sub { font-size: 0.78rem; color: var(--dim); }
+  .acct-del { background: none; border: 1px solid var(--border); color: var(--red); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; }
+  .acct-del:hover { background: var(--red); color: #fff; border-color: var(--red); }
+  .modal-form { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .modal-form input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 0.9rem; }
+  .modal-form .err { color: var(--red); font-size: 0.82rem; display: none; }
+  .modal-form .hint { color: var(--dim); font-size: 0.78rem; }
+</style>
+</head>
+<body>
+
+<div class="refresh-bar">
+  <h1>Trade Health Tracker</h1>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span id="lastUpdate"></span>
+    <button onclick="doRefresh()">Refresh</button>
+    <button class="gear-btn" onclick="openSettings()" title="Settings">⚙</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this) closeSettings()">
+  <div class="modal-box">
+    <h2>Accounts <button class="modal-close" onclick="closeSettings()">✕</button></h2>
+    <div id="settingsAcctList"></div>
+    <form class="modal-form" onsubmit="return submitAddAccount(event)">
+      <select id="newAcctExchange" onchange="onExchangeChange()"></select>
+      <input id="newAcctLabel" placeholder="Label (e.g. main, sub1)" required>
+      <input id="newAcctApiKey" placeholder="API Key" required>
+      <input id="newAcctSecretKey" placeholder="Secret Key" type="password" required>
+      <input id="newAcctPassphrase" placeholder="Passphrase" type="password" style="display:none">
+      <div class="hint">리드온리 키를 권장합니다. 저장 전에 실제로 인증되는지 확인합니다.</div>
+      <div class="err" id="newAcctErr"></div>
+      <button type="submit" id="newAcctSubmit">Add Account</button>
+    </form>
+  </div>
+</div>
+
+<div class="filters">
+  <div>
+    <div class="filter-label">Accounts</div>
+    <div class="acct-group" id="acctGroup"></div>
+  </div>
+  <div>
+    <div class="filter-label">Instruments</div>
+    <div class="inst-group" id="instGroup"></div>
+  </div>
+  <div>
+    <div class="filter-label">Date Range (applies to everything)</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <div class="tf-group" id="tfGroup">
+        <label><input type="radio" name="tf" class="tf-check" value="all" checked onchange="onTimeframeChange()"><span class="tf-tag">All</span></label>
+        <label><input type="radio" name="tf" class="tf-check" value="365" onchange="onTimeframeChange()"><span class="tf-tag">1Y</span></label>
+        <label><input type="radio" name="tf" class="tf-check" value="90" onchange="onTimeframeChange()"><span class="tf-tag">90D</span></label>
+        <label><input type="radio" name="tf" class="tf-check" value="30" onchange="onTimeframeChange()"><span class="tf-tag">30D</span></label>
+        <label><input type="radio" name="tf" class="tf-check" value="7" onchange="onTimeframeChange()"><span class="tf-tag">7D</span></label>
+        <label><input type="radio" name="tf" class="tf-check" value="custom" onchange="onTimeframeChange()"><span class="tf-tag">Custom</span></label>
+      </div>
+      <span id="customRange" style="display:none;gap:4px;align-items:center">
+        <input type="date" id="customFrom" onchange="onTimeframeChange()" style="font-size:0.85rem;padding:4px 6px">
+        <span style="font-size:0.85rem;color:var(--dim)">→</span>
+        <input type="date" id="customTo" onchange="onTimeframeChange()" style="font-size:0.85rem;padding:4px 6px">
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="grid" id="summaryCards"></div>
+
+<div class="chart-row">
+  <div class="chart-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">Cumulative PNL</h3>
+      <div class="pnl-toggles" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <label style="cursor:pointer;font-size:0.85rem"><input type="checkbox" id="togGross" onchange="savePnlToggles();rerenderCumPnl()"> Gross</label>
+        <label style="cursor:pointer;font-size:0.85rem"><input type="checkbox" id="togExpected" onchange="savePnlToggles();rerenderCumPnl()"> Expected</label>
+      </div>
+    </div>
+    <canvas id="chartCumPnl"></canvas>
+  </div>
+  <div class="chart-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="display:flex;gap:4px">
+        <button id="calFirstBtn" onclick="jumpCalFirst()" style="padding:4px 10px" title="First month with data">«</button>
+        <button id="calPrevBtn" onclick="changeCalMonth(-1)" style="padding:4px 10px">‹</button>
+      </div>
+      <h3 style="margin:0" id="calTitle">Daily PNL</h3>
+      <div style="display:flex;gap:4px">
+        <button id="calNextBtn" onclick="changeCalMonth(1)" style="padding:4px 10px">›</button>
+        <button id="calTodayBtn" onclick="jumpCalToday()" style="padding:4px 10px" title="Current month">»</button>
+      </div>
+    </div>
+    <div class="cal-header" id="calHeader"></div>
+    <div class="cal-grid" id="calDaily"></div>
+  </div>
+</div>
+
+<div class="chart-box" style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:0.82rem">
+  <span style="color:var(--dim);font-weight:600">Net PNL range</span>
+  <span style="color:var(--dim)">|Net PNL| ≥</span>
+  <input type="number" id="minPnlAll" step="0.01" placeholder="min" style="width:75px;padding:3px 6px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+  <span style="color:var(--dim)">≤</span>
+  <input type="number" id="maxPnlAll" step="0.01" placeholder="max" style="width:75px;padding:3px 6px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+  <span style="color:var(--dim);font-size:0.72rem">아래 4개 차트 공통 적용</span>
+</div>
+
+<div class="chart-row">
+  <div class="chart-box">
+    <h3>Net PNL Distribution</h3>
+    <canvas id="chartNetPnlHist"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Expected PNL Distribution <span style="color:var(--dim);font-size:0.72rem;font-weight:400">(Net + 추정 리베이트)</span></h3>
+    <canvas id="chartExpectedPnlHist"></canvas>
+  </div>
+</div>
+
+<div class="chart-row">
+  <div class="chart-box">
+    <h3>Return% Distribution</h3>
+    <canvas id="chartReturnHist"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Holding Time Distribution</h3>
+    <canvas id="chartHoldHist"></canvas>
+  </div>
+</div>
+
+<div class="chart-row">
+  <div class="chart-box" style="display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">Net PNL vs Position Size</h3>
+      <button onclick="resetChartZoom('chartLossPattern')" style="padding:4px 10px;font-size:0.8rem">Reset Zoom</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.78rem;margin-bottom:8px;align-items:center">
+      <span style="color:var(--dim)">Size</span>
+      <input type="number" id="minSizeThreshold" step="0.01" placeholder="min" style="width:65px;padding:2px 5px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+      <span style="color:var(--dim)">–</span>
+      <input type="number" id="maxSizeThreshold" step="0.01" placeholder="max" style="width:65px;padding:2px 5px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:0.78rem;margin-bottom:8px">
+      <span style="color:var(--dim)">Return:</span>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="value" data-stat="avg" checked onchange="saveLossPatternSettings();rerenderLossPattern()"> Avg</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="value" data-stat="median" onchange="saveLossPatternSettings();rerenderLossPattern()"> Med</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="value" data-stat="max" onchange="saveLossPatternSettings();rerenderLossPattern()"> Max</label>
+      <span style="color:var(--dim);margin-left:10px">Return%:</span>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="ratio" data-stat="avg" checked onchange="saveLossPatternSettings();rerenderLossPattern()"> Avg</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="ratio" data-stat="median" onchange="saveLossPatternSettings();rerenderLossPattern()"> Med</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-toggle" data-metric="ratio" data-stat="max" onchange="saveLossPatternSettings();rerenderLossPattern()"> Max</label>
+    </div>
+    <div style="position:relative"><canvas id="chartLossPattern"></canvas></div>
+  </div>
+  <div class="chart-box" style="display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="margin:0">Net PNL vs Holding Time</h3>
+      <button onclick="resetChartZoom('chartHoldTime')" style="padding:4px 10px;font-size:0.8rem">Reset Zoom</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.78rem;margin-bottom:8px;align-items:center">
+      <span style="color:var(--dim)">Time(h)</span>
+      <input type="number" id="minTimeHold" step="0.01" placeholder="min" style="width:65px;padding:2px 5px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+      <span style="color:var(--dim)">–</span>
+      <input type="number" id="maxTimeHold" step="0.01" placeholder="max" style="width:65px;padding:2px 5px" onchange="saveLossPatternSettings();rerenderLossPattern()">
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:0.78rem;margin-bottom:8px">
+      <span style="color:var(--dim)">Return:</span>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="value" data-stat="avg" checked onchange="saveLossPatternSettings();rerenderLossPattern()"> Avg</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="value" data-stat="median" onchange="saveLossPatternSettings();rerenderLossPattern()"> Med</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="value" data-stat="max" onchange="saveLossPatternSettings();rerenderLossPattern()"> Max</label>
+      <span style="color:var(--dim);margin-left:10px" title="Return Per Hour — 시간당 수익($/h)">RPH:</span>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="ratio" data-stat="avg" checked onchange="saveLossPatternSettings();rerenderLossPattern()"> Avg</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="ratio" data-stat="median" onchange="saveLossPatternSettings();rerenderLossPattern()"> Med</label>
+      <label style="cursor:pointer"><input type="checkbox" class="refline-hold" data-metric="ratio" data-stat="max" onchange="saveLossPatternSettings();rerenderLossPattern()"> Max</label>
+    </div>
+    <div style="position:relative"><canvas id="chartHoldTime"></canvas></div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Open Positions</h3>
+  <table id="tblPositions"></table>
+</div>
+<div class="section">
+  <h3>Recent Trades (last 50)</h3>
+  <table id="tblTrades"></table>
+</div>
+<div class="section">
+  <h3>Recent Closes (last 50)</h3>
+  <table id="tblCloses"></table>
+</div>
+<div class="section">
+  <h3>Recent Orders (last 50)</h3>
+  <table id="tblRecent"></table>
+</div>
+
+<script>
+// chartjs-plugin-datalabels는 zoom 플러그인과 달리 자동 등록이 안 돼서 명시적으로 등록해야 함.
+// 등록되면 모든 차트에 기본 적용되니 전역으로는 꺼두고, 손실패턴 기준선처럼 라벨이 필요한
+// 데이터셋에서만 datalabels.display로 개별 켠다.
+if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.plugins.datalabels = { display: false };
+}
+const charts = {};
+const fmt = (v, d=4) => Number(v||0).toFixed(d);
+const fmtPnl = (v, d=4) => { const n = Number(v||0); const s = n.toFixed(d); return `<span class="${n>=0?'pos':'neg'}">${n>=0?'+':''}${s}</span>`; };
+
+function qs(params) {
+  const s = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (Array.isArray(v)) v.forEach(x => s.append(k, x));
+    else s.set(k, v);
+  }
+  const str = s.toString();
+  return str ? '?' + str : '';
+}
+
+function getSelectedAccounts() {
+  const checks = document.querySelectorAll('.acct-check:checked');
+  return [...checks].map(c => c.value);
+}
+
+function saveAccountFilter() {
+  localStorage.setItem('th_accounts', JSON.stringify(getSelectedAccounts()));
+}
+
+function restoreAccountFilter() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('th_accounts') || '[]');
+    if (!saved.length) return;
+    document.querySelectorAll('.acct-check').forEach(c => {
+      c.checked = saved.includes(c.value);
+    });
+  } catch {}
+}
+
+// credentials 테이블에 등록된(=현재 활성) 계정만 /api/accounts가 돌려준다. 값은 "exchange::label"
+// 복합키(같은 라벨이 거래소별로 겹칠 수 있어서). 토글 안 하면(=전부 미체크) 서버가 활성 계정
+// 전체를 기본값으로 보여주므로 별도 처리 없이 그대로 둠.
+async function loadAccounts() {
+  const accounts = await (await fetch('/api/accounts')).json();
+  const group = document.getElementById('acctGroup');
+  if (!accounts.length) {
+    group.innerHTML = '<span style="color:var(--dim);font-size:0.85rem">등록된 계정이 없습니다 — 톱니바퀴(⚙)에서 추가하세요</span>';
+    return;
+  }
+  group.innerHTML = accounts.map(a =>
+    `<label><input type="checkbox" class="acct-check" value="${a.account}" onchange="saveAccountFilter();loadInstruments().then(()=>{restoreInstrumentFilter();loadAll();})"><span class="acct-tag">${a.label}${a.userId ? ` (${a.userId})` : ''}</span></label>`
+  ).join('');
+}
+
+// 종목 필터 — 계정 필터와 완전히 같은 패턴(날짜 필터처럼 사이트 전체에 적용, api()에서 자동 주입).
+function getSelectedInstruments() {
+  const checks = document.querySelectorAll('.inst-check:checked');
+  return [...checks].map(c => c.value);
+}
+
+function saveInstrumentFilter() {
+  localStorage.setItem('th_instruments', JSON.stringify(getSelectedInstruments()));
+}
+
+function restoreInstrumentFilter() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('th_instruments') || '[]');
+    if (!saved.length) return;
+    document.querySelectorAll('.inst-check').forEach(c => {
+      c.checked = saved.includes(c.value);
+    });
+  } catch {}
+}
+
+async function loadInstruments() {
+  const insts = await (await fetch('/api/instruments' + qs({ account: getSelectedAccounts() }))).json();
+  const group = document.getElementById('instGroup');
+  if (!insts.length) {
+    group.innerHTML = '<span style="color:var(--dim);font-size:0.85rem">데이터 없음</span>';
+    return;
+  }
+  group.innerHTML = insts.map(id =>
+    `<label><input type="checkbox" class="inst-check" value="${id}" onchange="saveInstrumentFilter();loadAll()"><span class="inst-tag">${id}</span></label>`
+  ).join('');
+}
+
+let exchangeMeta = [];
+
+async function loadExchangeOptions() {
+  exchangeMeta = await (await fetch('/api/settings/exchanges')).json();
+  const sel = document.getElementById('newAcctExchange');
+  sel.innerHTML = exchangeMeta.map(e => `<option value="${e.id}">${e.label}</option>`).join('');
+  onExchangeChange();
+}
+
+function onExchangeChange() {
+  const id = document.getElementById('newAcctExchange').value;
+  const ex = exchangeMeta.find(e => e.id === id);
+  document.getElementById('newAcctPassphrase').style.display = ex?.requiresPassphrase ? 'block' : 'none';
+}
+
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+  loadExchangeOptions();
+  loadSettingsAccounts();
+}
+
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+
+async function loadSettingsAccounts() {
+  const accounts = await (await fetch('/api/settings/accounts')).json();
+  const list = document.getElementById('settingsAcctList');
+  list.innerHTML = accounts.length ? accounts.map(a => `
+    <div class="acct-row" style="flex-direction:column;align-items:stretch;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="acct-info">
+          <span class="lbl">${a.label} <span style="color:var(--dim);font-weight:400">(${a.exchangeLabel})</span></span>
+          <span class="sub">${a.apiKey}${a.userId ? ` · user ${a.userId}` : ''}</span>
+        </div>
+        <button class="acct-del" onclick="deleteAccount('${a.exchange}','${a.label}')">Delete</button>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;font-size:0.82rem;color:var(--dim)">
+        <span>Rebate/voucher %</span>
+        <input type="number" min="0" max="100" step="0.1" value="${(a.rebateRate*100).toFixed(1)}"
+          id="rebate-${a.exchange}-${a.label}" style="width:70px;padding:3px 6px;border:1px solid var(--border);border-radius:4px">
+        <button onclick="saveRebateRate('${a.exchange}','${a.label}')" style="padding:3px 10px;font-size:0.8rem">Save</button>
+        <span id="rebate-saved-${a.exchange}-${a.label}" style="display:none;color:var(--green)">Saved</span>
+      </div>
+    </div>
+  `).join('') : '<div style="color:var(--dim);font-size:0.85rem;padding:8px 0">등록된 계정이 없습니다.</div>';
+}
+
+async function saveRebateRate(exchange, label) {
+  const input = document.getElementById(`rebate-${exchange}-${label}`);
+  const pct = Number(input.value);
+  const rebateRate = Math.max(0, Math.min(100, pct)) / 100;
+  await fetch(`/api/settings/accounts/${encodeURIComponent(exchange)}/${encodeURIComponent(label)}/rebate-rate`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rebateRate }),
+  });
+  const savedTag = document.getElementById(`rebate-saved-${exchange}-${label}`);
+  savedTag.style.display = 'inline';
+  setTimeout(() => { savedTag.style.display = 'none'; }, 1500);
+  await loadAll();
+}
+
+async function deleteAccount(exchange, label) {
+  if (!confirm(`"${label}" 계정을 삭제할까요? (저장된 과거 데이터는 DB에 남지만 화면엔 더 이상 안 보입니다)`)) return;
+  await fetch(`/api/settings/accounts/${encodeURIComponent(exchange)}/${encodeURIComponent(label)}`, { method: 'DELETE' });
+  await loadSettingsAccounts();
+  await loadAccounts();
+  await loadDataBounds();
+  await loadAll();
+}
+
+async function submitAddAccount(event) {
+  event.preventDefault();
+  const exchange = document.getElementById('newAcctExchange').value;
+  const label = document.getElementById('newAcctLabel').value.trim();
+  const apiKey = document.getElementById('newAcctApiKey').value.trim();
+  const secretKey = document.getElementById('newAcctSecretKey').value.trim();
+  const passphrase = document.getElementById('newAcctPassphrase').value.trim();
+  const errEl = document.getElementById('newAcctErr');
+  const submitBtn = document.getElementById('newAcctSubmit');
+  errEl.style.display = 'none';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Verifying...';
+  try {
+    const res = await fetch('/api/settings/accounts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exchange, label, apiKey, secretKey, passphrase }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to add account');
+
+    document.getElementById('newAcctLabel').value = '';
+    document.getElementById('newAcctApiKey').value = '';
+    document.getElementById('newAcctSecretKey').value = '';
+    document.getElementById('newAcctPassphrase').value = '';
+    await loadSettingsAccounts();
+    await loadAccounts();
+    await doRefresh();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Add Account';
+  }
+  return false;
+}
+
+async function api(path, extra = {}) {
+  const params = { ...getGlobalTimeRange(), ...extra };
+  const accounts = getSelectedAccounts();
+  if (accounts.length) params.account = accounts;
+  const insts = getSelectedInstruments();
+  if (insts.length) params.instId = insts;
+  const res = await fetch(path + qs(params));
+  return res.json();
+}
+
+async function loadAll() {
+  const [summary, trades, recent, closes, positions] = await Promise.all([
+    api('/api/summary'),
+    api('/api/recent-trades'),
+    api('/api/recent-orders'),
+    api('/api/recent-closes'),
+    api('/api/positions'),
+    loadCumPnl(),
+    loadCalendar(),
+    loadLossPattern(),
+  ]);
+
+  renderSummary(summary);
+  renderPositionsTable(positions);
+  renderTradesTable(trades);
+  renderRecentTable(recent);
+  renderClosesTable(closes);
+
+  document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+// 손실 패턴 산점도용 — "최근 50개" 테이블과 달리 전체 청산 내역이 필요.
+let lastCloses = [];
+async function loadLossPattern() {
+  lastCloses = await api('/api/recent-closes', { limit: 20000 });
+  rerenderLossPattern();
+}
+
+// 기준선/threshold 토글만 바뀌었을 때는 API를 다시 안 부르고 캐시된 데이터로 4개 차트 모두 재렌더.
+function rerenderLossPattern() {
+  renderLossPatternChart(lastCloses);
+  renderHoldTimeChart(lastCloses);
+  renderReturnHistChart(lastCloses);
+  renderHoldHistChart(lastCloses);
+  renderNetPnlHistChart(lastCloses);
+  renderExpectedPnlHistChart(lastCloses);
+}
+
+function resetChartZoom(id) {
+  if (charts[id]) charts[id].resetZoom();
+}
+
+// threshold 입력값 + 기준선 체크박스 상태를 저장/복원 — 다음에 열었을 때도 그대로 유지되게.
+const LP_INPUT_IDS = [
+  'minPnlAll', 'maxPnlAll',            // 4개 차트 공통 Net PNL 레인지
+  'minSizeThreshold', 'maxSizeThreshold', // 사이즈 산점도 전용
+  'minTimeHold', 'maxTimeHold',        // 보유시간 산점도 전용
+];
+
+function saveLossPatternSettings() {
+  const vals = {};
+  for (const id of LP_INPUT_IDS) vals[id] = document.getElementById(id)?.value ?? '';
+  vals.reflines = [...document.querySelectorAll('.refline-toggle')].map(c => c.checked);
+  vals.reflinesHold = [...document.querySelectorAll('.refline-hold')].map(c => c.checked);
+  localStorage.setItem('th_losspattern', JSON.stringify(vals));
+}
+
+function restoreLossPatternSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('th_losspattern') || '{}');
+    for (const id of LP_INPUT_IDS) {
+      const el = document.getElementById(id);
+      if (el && s[id] != null) el.value = s[id];
+    }
+    if (Array.isArray(s.reflines)) {
+      document.querySelectorAll('.refline-toggle').forEach((c, i) => { if (s.reflines[i] != null) c.checked = s.reflines[i]; });
+    }
+    if (Array.isArray(s.reflinesHold)) {
+      document.querySelectorAll('.refline-hold').forEach((c, i) => { if (s.reflinesHold[i] != null) c.checked = s.reflinesHold[i]; });
+    }
+  } catch {}
+}
+
+function median(sortedArr) {
+  if (!sortedArr.length) return 0;
+  const mid = Math.floor(sortedArr.length / 2);
+  return sortedArr.length % 2 ? sortedArr[mid] : (sortedArr[mid - 1] + sortedArr[mid]) / 2;
+}
+function mean(arr) {
+  return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+}
+
+// 승/패 각각의 평균·중앙값·최대(손실은 가장 심한 것)를 **값($, 수평선)과 비율(원점 대각선)
+// 둘 다** 구한다. value는 p.y(net PNL $), ratio는 ratioField가 가리키는 필드 — 사이즈 대비
+// 수익률(returnPct, %)이든 시간 대비 수익(rph, $/h)이든 축에 맞게 갈아끼운다.
+// (NaN/Infinity는 통계에서 제외 — 예: 보유시간 0인 청산의 rph는 무한대라 버림.)
+function computeStats(points, ratioField) {
+  const num = arr => arr.filter(v => Number.isFinite(v)).sort((a, b) => a - b);
+  const wins = points.filter(p => p.win);
+  const losses = points.filter(p => !p.win);
+  const wY = num(wins.map(p => p.y));
+  const lY = num(losses.map(p => p.y));
+  const wR = num(wins.map(p => p[ratioField]));
+  const lR = num(losses.map(p => p[ratioField]));
+  return {
+    value: {
+      lossAvg: mean(lY), lossMedian: median(lY), lossMax: lY.length ? lY[0] : 0,
+      winAvg: mean(wY), winMedian: median(wY), winMax: wY.length ? wY[wY.length - 1] : 0,
+    },
+    ratio: {
+      lossAvg: mean(lR), lossMedian: median(lR), lossMax: lR.length ? lR[0] : 0,
+      winAvg: mean(wR), winMedian: median(wR), winMax: wR.length ? wR[wR.length - 1] : 0,
+    },
+  };
+}
+
+// opts: { selector, ratioField, slopeOf, ratioFmt }
+//  - selector: 이 차트의 기준선 토글 체크박스 클래스('refline-toggle' | 'refline-hold')
+//  - ratioField: 대각선의 근거가 되는 점 필드('returnPct' | 'rph')
+//  - slopeOf(ratioVal): 대각선 기울기(사이즈축은 %/100, 시간축은 rph 그대로 $/h)
+//  - ratioFmt(ratioVal): 대각선 라벨 텍스트
+function buildRefLineDatasets(points, opts) {
+  if (!points.length) return [];
+  const { selector, ratioField, slopeOf, ratioFmt } = opts;
+  const stats = computeStats(points, ratioField);
+  const maxX = Math.max(...points.map(p => p.x));
+  // stat당 win/loss 한 쌍씩 — 체크박스 하나가 win+loss를 동시에 켠다(개별 토글 없음).
+  // loss는 항상 양의 y쪽으로 미러 반사선도 같이 그려짐(디폴트, 별도 토글 없음).
+  const statDefs = [
+    { stat: 'avg', label: 'Avg', dash: [2, 2] },
+    { stat: 'median', label: 'Median', dash: [6, 4] },
+    { stat: 'max', label: 'Max', dash: [] },
+  ];
+  // 수평선(값 $): y = value 고정, x는 0~maxX 전체를 가로지름.
+  const hLine = (label, value, color, dash, alpha = 1) => ({
+    type: 'line', label,
+    data: [{ x: 0, y: value }, { x: maxX, y: value }],
+    borderColor: alpha < 1 ? color + Math.round(alpha * 255).toString(16).padStart(2, '0') : color,
+    borderWidth: 0.3, borderDash: dash,
+    pointRadius: 0, fill: false, tension: 0,
+    datalabels: {
+      display: ctx => ctx.dataIndex === 1,
+      align: 'end', anchor: 'end', offset: 4,
+      color: alpha < 1 ? color + '99' : color,
+      font: { size: 10 },
+      formatter: () => fmt(value, 2),
+    },
+  });
+  // 대각선(비율): 원점 지나는 기울기 = slopeOf(ratioVal). 사이즈축은 %/100, 시간축은 $/h.
+  const dLine = (label, ratioVal, color, dash, alpha = 1) => ({
+    type: 'line', label,
+    data: [{ x: 0, y: 0 }, { x: maxX, y: slopeOf(ratioVal) * maxX }],
+    borderColor: alpha < 1 ? color + Math.round(alpha * 255).toString(16).padStart(2, '0') : color,
+    borderWidth: 0.3, borderDash: dash.length ? dash : [1, 3], // 값선과 시각적으로 구분되게 항상 도트 계열
+    pointRadius: 0, fill: false, tension: 0,
+    datalabels: {
+      display: ctx => ctx.dataIndex === 1,
+      align: 'start', anchor: 'end', offset: 4,
+      color: alpha < 1 ? color + '99' : color,
+      font: { size: 10, style: 'italic' },
+      formatter: () => ratioFmt(ratioVal),
+    },
+  });
+  const out = [];
+  for (const d of statDefs) {
+    const valueOn = document.querySelector(`.${selector}[data-metric="value"][data-stat="${d.stat}"]`)?.checked;
+    const ratioOn = document.querySelector(`.${selector}[data-metric="ratio"][data-stat="${d.stat}"]`)?.checked;
+    const lossKey = 'loss' + d.stat[0].toUpperCase() + d.stat.slice(1);
+    const winKey = 'win' + d.stat[0].toUpperCase() + d.stat.slice(1);
+    if (valueOn) {
+      out.push(hLine(d.label + ' Win $', stats.value[winKey], '#16a34a', d.dash));
+      out.push(hLine(d.label + ' Loss $', stats.value[lossKey], '#dc2626', d.dash));
+      out.push(hLine(d.label + ' Loss $ (mirror)', -stats.value[lossKey], '#dc2626', d.dash, 0.8));
+    }
+    if (ratioOn) {
+      out.push(dLine(d.label + ' Win %', stats.ratio[winKey], '#16a34a', d.dash));
+      out.push(dLine(d.label + ' Loss %', stats.ratio[lossKey], '#dc2626', d.dash));
+      out.push(dLine(d.label + ' Loss % (mirror)', -stats.ratio[lossKey], '#dc2626', d.dash, 0.8));
+    }
+  }
+  return out;
+}
+
+// X = 포지션 사이즈(명목가치 $, size×avgPx×multiplier) — 순수 결정변수(내가 얼마나 베팅했나).
+// Y = 실현 net PNL($) — 순수 결과. 이전엔 X를 "%수익률(grossPnl/notional)"로 뒀었는데, 그러면
+// X·Y 둘 다 grossPnl/netPnl을 공유해서 사이즈가 고정이면 두 축이 원점 지나는 직선에 강제로
+// 놓이는 인위적 상관관계가 생겼음(같은 값이 양쪽에 중복) — 사이즈 자체를 X로 쓰면 두 축이
+// 독립적이라 "사이즈 대비 손익 분포"를 왜곡 없이 볼 수 있음. %수익률은 필요하면 returnPct로
+// 별도 보존(1D 히스토그램용, 여기선 상관관계 문제가 없음 — pnl과 짝지어 그리지 않으므로).
+// 입력이 비었으면 min은 0, max는 Infinity(=제한 없음). Min은 노이즈성 소액 트레이드 제거용,
+// Max는 아웃라이어(비정상적으로 크게 잡힌 트레이드) 제거용.
+function rangeMin(id) { const v = document.getElementById(id)?.value; return v ? Number(v) : 0; }
+function rangeMax(id) { const v = document.getElementById(id)?.value; return v ? Number(v) : Infinity; }
+
+function fmtHours(h) { return h >= 1 ? h.toFixed(1) + 'h' : (h * 60).toFixed(0) + 'm'; }
+
+// 청산 하나를 산점도/히스토그램 공통 좌표로 변환(필터 전). 4개 차트가 이 위에서 각자 필터링/비닝.
+function allClosePoints(closes) {
+  return closes
+    .map(c => {
+      // 계약형 상품은 1계약이 1 기초자산이 아닐 수 있어서(예: Gate.io BTC_USDT는
+      // 1계약=0.0001BTC) 서버가 계산해주는 multiplier를 곱해야 실제 명목가치가 나온다.
+      const notional = Math.abs(Number(c.closedSize)) * Number(c.avgPx) * (Number(c.multiplier) || 1);
+      if (!notional) return null;
+      const holdH = (Number(c.holdMs) || 0) / 3600000;
+      const netPnl = Number(c.netPnl);
+      return {
+        notional,
+        holdH,
+        y: netPnl,
+        expectedPnl: Number(c.expectedPnl), // Net + 추정 리베이트(요율 0이면 netPnl과 동일)
+        returnPct: Number(c.grossPnl) / notional * 100,
+        rph: holdH > 1e-9 ? netPnl / holdH : NaN, // 시간당 수익($/h) — 보유시간 0이면 정의 불가(통계에서 제외)
+        win: netPnl > 0,
+      };
+    })
+    .filter(Boolean);
+}
+
+function renderLossPatternChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const minSize = rangeMin('minSizeThreshold'), maxSize = rangeMax('maxSizeThreshold');
+  const points = allClosePoints(closes)
+    .filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl && p.notional >= minSize && p.notional <= maxSize)
+    .map(p => ({ x: p.notional, y: p.y, returnPct: p.returnPct, win: p.win }));
+  const wins = points.filter(p => p.win);
+  const losses = points.filter(p => !p.win);
+  const refLines = buildRefLineDatasets(points, { selector: 'refline-toggle', ratioField: 'returnPct', slopeOf: v => v / 100, ratioFmt: v => `${v.toFixed(1)}%` });
+  renderScatter('chartLossPattern', wins, losses, 'Position Size ($ notional)',
+    r => r.returnPct != null ? `size $${fmt(r.x, 2)} / pnl ${fmt(r.y)} (${r.returnPct.toFixed(2)}%)` : `pnl ${fmt(r.y, 2)}`, refLines);
+}
+
+// 점 데이터만으로 축 범위를 잡는다(4% 여유). 기준선/대각선 데이터셋은 여기 안 들어오므로,
+// 대각선 오른쪽 끝값이 축을 잡아늘려서 화면이 망가지는 문제 없이 "점 중심으로 꽉 차게" 나온다.
+// 줌/팬은 그대로 되고, Reset Zoom을 누르면 이 범위로 되돌아온다.
+function fitBounds(pts) {
+  if (!pts.length) return { x: {}, y: {} };
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xPad = (xMax - xMin) * 0.04 || 1;
+  const yPad = (yMax - yMin) * 0.04 || 1;
+  return { x: { min: xMin - xPad, max: xMax + xPad }, y: { min: yMin - yPad, max: yMax + yPad } };
+}
+
+// 산점도 하나 그리기(win/loss 색분리, 줌/팬). Net PNL vs (사이즈|보유시간) 공용.
+function renderScatter(id, wins, losses, xTitle, xTip, extraDatasets = []) {
+  const b = fitBounds([...wins, ...losses]);
+  makeChart(id, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        { label: 'Win', data: wins, backgroundColor: '#16a34a33', borderColor: '#4ade80', borderWidth: 0.5, pointRadius: 1, pointHoverRadius: 4, pointHoverBackgroundColor: '#16a34a' },
+        { label: 'Loss', data: losses, backgroundColor: '#dc262633', borderColor: '#f87171', borderWidth: 0.5, pointRadius: 1, pointHoverRadius: 4, pointHoverBackgroundColor: '#dc2626' },
+        ...extraDatasets,
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true, aspectRatio: 1.333, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => xTip(ctx.raw) } },
+        zoom: {
+          pan: { enabled: true, mode: 'xy', scaleMode: 'xy', modifierKey: null, threshold: 0 },
+          zoom: { wheel: { enabled: true, modifierKey: null }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'xy', scaleMode: 'xy' },
+        },
+      },
+      scales: {
+        x: { min: b.x.min, max: b.x.max, title: { display: true, text: xTitle, color: '#4b5563' }, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
+        y: { min: b.y.min, max: b.y.max, title: { display: true, text: 'Net PNL', color: '#4b5563' }, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
+      },
+    },
+  });
+}
+
+// win/loss 스택 히스토그램 하나 그리기. valueOf로 비닝 대상을, labelFmt로 x축 라벨을 결정.
+// winOf로 승/패 색분리 기준을 결정(기본은 net 기준 p.win — PNL 분포는 자기 값의 부호로 나눔).
+function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win) {
+  if (!points.length) { makeChart(id, { type: 'bar', data: { labels: [], datasets: [] } }); return; }
+  const vals = points.map(valueOf);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const binCount = 30;
+  const binSize = (max - min) / binCount || 1;
+  const winBins = new Array(binCount).fill(0);
+  const lossBins = new Array(binCount).fill(0);
+  for (const p of points) {
+    let idx = Math.floor((valueOf(p) - min) / binSize);
+    if (idx >= binCount) idx = binCount - 1;
+    if (idx < 0) idx = 0;
+    if (winOf(p)) winBins[idx]++; else lossBins[idx]++;
+  }
+  const labels = winBins.map((_, i) => labelFmt(min + i * binSize));
+  makeChart(id, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Win', data: winBins, backgroundColor: '#16a34a99' },
+        { label: 'Loss', data: lossBins, backgroundColor: '#dc262699' },
+      ],
+    },
+    options: {
+      responsive: true,
+      animation: false,
+      plugins: { legend: { labels: { color: '#6b7280' } } },
+      scales: {
+        x: { stacked: true, ticks: { color: '#4b5563', maxTicksLimit: 15 }, grid: { color: '#9ca3af80' } },
+        y: { stacked: true, ticks: { color: '#4b5563' }, beginAtZero: true, grid: { color: '#9ca3af80' } },
+      },
+    },
+  });
+}
+
+function renderHoldTimeChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const minT = rangeMin('minTimeHold'), maxT = rangeMax('maxTimeHold');
+  const points = allClosePoints(closes)
+    .filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl && p.holdH >= minT && p.holdH <= maxT);
+  const refPoints = points.map(p => ({ x: p.holdH, y: p.y, rph: p.rph, win: p.win }));
+  const wins = points.filter(p => p.win).map(p => ({ x: p.holdH, y: p.y, rph: p.rph }));
+  const losses = points.filter(p => !p.win).map(p => ({ x: p.holdH, y: p.y, rph: p.rph }));
+  const refLines = buildRefLineDatasets(refPoints, { selector: 'refline-hold', ratioField: 'rph', slopeOf: v => v, ratioFmt: v => `${fmt(v, 2)}/h` });
+  renderScatter('chartHoldTime', wins, losses, 'Holding Time (h)',
+    r => `hold ${fmtHours(r.x)} / pnl ${fmt(r.y)} (${fmt(r.rph, 2)}/h)`, refLines);
+}
+
+function renderReturnHistChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
+  renderHistogram('chartReturnHist', points, p => p.returnPct, v => v.toFixed(1) + '%');
+}
+
+function renderHoldHistChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
+  renderHistogram('chartHoldHist', points, p => p.holdH, v => fmtHours(v));
+}
+
+// Net PNL(수수료 차감) 분포. 승/패는 net 부호 기준.
+function renderNetPnlHistChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
+  renderHistogram('chartNetPnlHist', points, p => p.y, v => fmt(v, 1), p => p.y > 0);
+}
+
+// Expected PNL(Net + 추정 리베이트) 분포. 리베이트 요율 0이면 Net 분포와 동일하게 나옴.
+function renderExpectedPnlHistChart(closes) {
+  const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
+  const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
+  renderHistogram('chartExpectedPnlHist', points, p => p.expectedPnl, v => fmt(v, 1), p => p.expectedPnl > 0);
+}
+
+function renderSummary(s) {
+  const netPnl = s.totalNetPnl || 0;
+  const grossPnl = s.totalGrossPnl || 0;
+  const expectedPnl = s.totalExpectedNetPnl || 0;
+  const winRate = s.totalTrades > 0 ? (s.winCount/s.totalTrades*100).toFixed(1) : '0';
+  document.getElementById('summaryCards').innerHTML = `
+    <div class="card"><h3>Net PNL</h3><div class="value ${netPnl>=0?'pos':'neg'}">${netPnl>=0?'+':''}${fmt(netPnl)}</div><div class="sub">Gross: ${fmt(grossPnl)} | Expected: ${fmt(expectedPnl)}</div></div>
+    <div class="card"><h3>Win Rate</h3><div class="value">${winRate}%</div><div class="sub">${s.winCount}W / ${s.lossCount}L</div></div>
+    <div class="card"><h3>Total Trades</h3><div class="value">${s.totalTrades}</div><div class="sub">${s.totalOrders} orders | Avg PNL: ${fmt(s.avgPnl)}</div></div>
+    <div class="card"><h3>Best / Worst</h3><div class="value pos">+${fmt(s.maxWin)}</div><div class="sub neg">${fmt(s.maxLoss)}</div></div>
+    <div class="card"><h3>Fees Total</h3><div class="value neg">-${fmt(s.totalFees)}</div><div class="sub">Real rebate: +${fmt(s.totalRebate)} | Expected rebate: +${fmt(s.totalExpectedRebate)}</div></div>
+  `;
+}
+
+function makeChart(id, cfg) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), cfg);
+}
+
+let cumPnlData = [];
+
+function savePnlToggles() {
+  localStorage.setItem('th_pnl_toggles', JSON.stringify({
+    gross: document.getElementById('togGross').checked,
+    expected: document.getElementById('togExpected').checked,
+  }));
+}
+
+function restorePnlToggles() {
+  try {
+    const s = JSON.parse(localStorage.getItem('th_pnl_toggles') || '{}');
+    document.getElementById('togGross').checked = !!s.gross;
+    document.getElementById('togExpected').checked = !!s.expected;
+  } catch {}
+}
+
+function rerenderCumPnl() { renderCumPnlChart(cumPnlData); }
+
+// 날짜 필터는 이제 PNL 차트 전용이 아니라 api() 안에서 자동으로 모든 호출에 붙는
+// 전역 필터 — summary/trades/orders/closes/calendar 등 전체 데이터에 적용됨.
+function getGlobalTimeframe() {
+  const checked = document.querySelector('input[name="tf"]:checked');
+  return checked ? checked.value : 'all';
+}
+
+function updateCustomRangeVisibility() {
+  document.getElementById('customRange').style.display = getGlobalTimeframe() === 'custom' ? 'inline-flex' : 'none';
+}
+
+function saveGlobalTimeframe() {
+  localStorage.setItem('th_timeframe', JSON.stringify({
+    tf: getGlobalTimeframe(),
+    from: document.getElementById('customFrom').value,
+    to: document.getElementById('customTo').value,
+  }));
+}
+
+function restoreGlobalTimeframe() {
+  try {
+    const s = JSON.parse(localStorage.getItem('th_timeframe') || '{}');
+    const tf = s.tf || 'all';
+    const target = document.querySelector(`input[name="tf"][value="${tf}"]`);
+    if (target) target.checked = true;
+    if (s.from) document.getElementById('customFrom').value = s.from;
+    if (s.to) document.getElementById('customTo').value = s.to;
+  } catch {}
+  updateCustomRangeVisibility();
+}
+
+function onTimeframeChange() {
+  updateCustomRangeVisibility();
+  saveGlobalTimeframe();
+  loadAll();
+}
+
+function getGlobalTimeRange() {
+  const tf = getGlobalTimeframe();
+  if (tf === 'all') return {};
+  if (tf === 'custom') {
+    const fromStr = document.getElementById('customFrom').value;
+    const toStr = document.getElementById('customTo').value;
+    const range = {};
+    if (fromStr) range.from = new Date(fromStr + 'T00:00:00').getTime();
+    if (toStr) range.to = new Date(toStr + 'T23:59:59').getTime();
+    return range;
+  }
+  return { from: Date.now() - Number(tf) * 86400000 };
+}
+
+async function loadCumPnl() {
+  const cumPnl = await api('/api/cumulative-pnl');
+  renderCumPnlChart(cumPnl);
+}
+
+function renderCumPnlChart(data) {
+  cumPnlData = data;
+  const showGross = document.getElementById('togGross').checked;
+  const showExpected = document.getElementById('togExpected').checked;
+  const toDate = bin => new Date(Number(bin));
+  const datasets = [];
+  if (showGross) datasets.push({ label: 'Gross PNL', data: data.map(d => ({ x: toDate(d.bin), y: d.cumGrossPnl })), borderColor: '#2563eb', borderWidth: 1.5, fill: false, tension: 0, pointRadius: 0, pointHitRadius: 10 });
+  if (showExpected) datasets.push({ label: 'Expected PNL', data: data.map(d => ({ x: toDate(d.bin), y: d.cumExpectedPnl })), borderColor: '#ca8a04', borderWidth: 1.5, fill: false, tension: 0, pointRadius: 0, pointHitRadius: 10, borderDash: [5, 3] });
+  datasets.push({ label: 'Net PNL', data: data.map(d => ({ x: toDate(d.bin), y: d.cumNetPnl })), borderColor: '#16a34a', borderWidth: 1.5, fill: false, tension: 0, pointRadius: 0, pointHitRadius: 10 });
+  makeChart('chartCumPnl', {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#6b7280' } },
+        tooltip: {
+          callbacks: {
+            title: ctx => new Date(ctx[0].parsed.x).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+          }
+        }
+      },
+      scales: {
+        x: { type: 'time', ticks: { color: '#6b7280', maxTicksLimit: 12, maxRotation: 0 } },
+        y: { ticks: { color: '#6b7280' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+let calState = null;
+let dataBounds = { minMonth: null };
+
+function initCalState() {
+  if (calState) return;
+  const now = new Date();
+  calState = { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+function calMonthStr() {
+  return `${calState.year}-${String(calState.month).padStart(2, '0')}`;
+}
+
+function todayMonthStr() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+async function loadDataBounds() {
+  dataBounds = await (await fetch('/api/data-bounds')).json();
+}
+
+function changeCalMonth(delta) {
+  initCalState();
+  calState.month += delta;
+  if (calState.month < 1) { calState.month = 12; calState.year--; }
+  if (calState.month > 12) { calState.month = 1; calState.year++; }
+  loadCalendar();
+}
+
+function jumpCalFirst() {
+  if (!dataBounds.minMonth) return;
+  const [y, m] = dataBounds.minMonth.split('-').map(Number);
+  calState = { year: y, month: m };
+  loadCalendar();
+}
+
+function jumpCalToday() {
+  const [y, m] = todayMonthStr().split('-').map(Number);
+  calState = { year: y, month: m };
+  loadCalendar();
+}
+
+function updateCalNavButtons() {
+  const cur = calMonthStr();
+  const atMin = dataBounds.minMonth ? cur <= dataBounds.minMonth : true;
+  const atMax = cur >= todayMonthStr();
+  document.getElementById('calFirstBtn').disabled = atMin;
+  document.getElementById('calPrevBtn').disabled = atMin;
+  document.getElementById('calNextBtn').disabled = atMax;
+  document.getElementById('calTodayBtn').disabled = atMax;
+}
+
+async function loadCalendar() {
+  initCalState();
+  const data = await api('/api/calendar', { month: calMonthStr() });
+  renderDailyCalendar(data);
+}
+
+function renderDailyCalendar(data) {
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  document.getElementById('calHeader').innerHTML = days.map(d => `<span>${d}</span>`).join('');
+  document.getElementById('calTitle').textContent = new Date(calState.year, calState.month - 1, 1)
+    .toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  let html = '';
+  for (const d of data) {
+    const pnl = Number(d.pnl);
+    const dayNum = new Date(d.date + 'T00:00:00').getDate();
+    const cls = d.orders === 0 ? 'zero' : (pnl >= 0 ? 'win' : 'loss');
+    const today = d.date === todayStr ? ' today' : '';
+    const otherMonth = d.inMonth ? '' : ' other-month';
+    const valStr = d.orders === 0 ? '-' : (pnl >= 0 ? '+' : '') + fmt(pnl, 2);
+    const valCls = d.orders === 0 ? '' : (pnl >= 0 ? 'pos' : 'neg');
+    html += `<div class="cal-cell ${cls}${today}${otherMonth}">
+      <span class="cal-day">${dayNum}</span>
+      <span class="cal-val ${valCls}">${valStr}</span>
+      ${d.orders > 0 ? `<span class="cal-orders">${d.entries} entries</span>` : ''}
+    </div>`;
+  }
+  document.getElementById('calDaily').innerHTML = html;
+  updateCalNavButtons();
+}
+
+function renderPositionsTable(data) {
+  if (!data.length) { document.getElementById('tblPositions').innerHTML = '<tr><td>No open positions</td></tr>'; return; }
+  document.getElementById('tblPositions').innerHTML = `
+    <tr><th>Instrument</th><th>Side</th><th>Size</th><th>Avg Px</th><th>Liq Px</th><th>Unrealized PNL</th><th>Mark Px</th></tr>
+    ${data.map(r => `<tr><td>${r.instId}</td><td>${r.posSide}</td><td>${r.pos}</td><td>${fmt(r.avgPx,2)}</td><td>${fmt(r.liqPx,2)}</td><td>${fmtPnl(r.unrealizedProfit)}</td><td>${fmt(r.lastPx,2)}</td></tr>`).join('')}
+  `;
+}
+
+function renderTradesTable(data) {
+  if (!data.length) { document.getElementById('tblTrades').innerHTML = '<tr><td>No trades</td></tr>'; return; }
+  document.getElementById('tblTrades').innerHTML = `
+    <tr><th>Closed</th><th>Instrument</th><th>Pos</th><th>Legs</th><th>Closed Sz</th><th>Gross PNL</th><th>Entry Fee</th><th>Exit Fee</th><th>Net PNL</th></tr>
+    ${data.map(r => {
+      const t = new Date(Number(r.endTime)).toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const openTag = r.open ? ' <span style="color:var(--blue);font-size:0.8em">(open)</span>' : '';
+      return `<tr><td>${t}${openTag}</td><td>${r.instId}</td><td>${r.posSide||'-'}</td><td>${r.closeCount}</td><td>${r.closedSize}</td><td>${fmtPnl(r.grossPnl)}</td><td>${fmt(r.entryFee)}</td><td>${fmt(r.exitFee)}</td><td>${fmtPnl(r.netPnl)}</td></tr>`;
+    }).join('')}
+  `;
+}
+
+function feePct(pnl, fee) {
+  const g = Number(pnl), f = Math.abs(Number(fee));
+  const t = Math.abs(g) + f;
+  if (t === 0) return '-';
+  return (f / t * 100).toFixed(1) + '%';
+}
+
+function renderRecentTable(data) {
+  document.getElementById('tblRecent').innerHTML = `
+    <tr><th>Time</th><th>Instrument</th><th>Side</th><th>Pos</th><th>Type</th><th>Size</th><th>Avg Px</th><th>PNL</th><th>Fee</th><th>Fee%</th></tr>
+    ${data.map(r => {
+      const t = new Date(Number(r.cTime)).toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      return `<tr><td>${t}</td><td>${r.instId}</td><td>${r.side}</td><td>${r.posSide||'-'}</td><td>${r.ordType}</td><td>${r.accFillSz}</td><td>${fmt(r.avgPx,2)}</td><td>${fmtPnl(r.pnl)}</td><td>${fmt(r.fee)}</td><td>${feePct(r.pnl, r.fee)}</td></tr>`;
+    }).join('')}
+  `;
+}
+
+function renderClosesTable(data) {
+  document.getElementById('tblCloses').innerHTML = `
+    <tr><th>Time</th><th>Instrument</th><th>Side</th><th>Pos</th><th>Closed Sz</th><th>Exit Px</th><th>Gross PNL</th><th>Entry Fee</th><th>Exit Fee</th><th>Net PNL</th></tr>
+    ${data.map(r => {
+      const t = new Date(Number(r.cTime)).toLocaleString('ko-KR', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const incomplete = r.complete ? '' : ' *';
+      return `<tr><td>${t}</td><td>${r.instId}</td><td>${r.side}</td><td>${r.posSide||'-'}</td><td>${r.closedSize}</td><td>${fmt(r.avgPx,2)}</td><td>${fmtPnl(r.grossPnl)}</td><td>${fmt(r.entryFee)}${incomplete}</td><td>${fmt(r.exitFee)}</td><td>${fmtPnl(r.netPnl)}</td></tr>`;
+    }).join('')}
+  `;
+}
+
+async function doRefresh() {
+  document.getElementById('lastUpdate').textContent = 'Refreshing data...';
+  try {
+    await fetch('/api/refresh', { method: 'POST' }).then(r => r.json());
+    await loadAccounts();
+    await loadDataBounds();
+    restoreAccountFilter();
+    await loadInstruments();
+    restoreInstrumentFilter();
+    restorePnlToggles();
+    restoreGlobalTimeframe();
+  restoreLossPatternSettings();
+    await loadAll();
+  } catch(e) { console.error(e); }
+}
+
+async function init() {
+  document.getElementById('lastUpdate').textContent = 'Refreshing data...';
+  await loadAccounts();
+  await loadDataBounds();
+  restoreAccountFilter();
+  await loadInstruments();
+  restoreInstrumentFilter();
+  restorePnlToggles();
+  restoreGlobalTimeframe();
+  restoreLossPatternSettings();
+  await loadAll();
+  fetch('/api/refresh', { method: 'POST' })
+    .then(r => r.json())
+    .then(async r => {
+      console.log('refresh:', r);
+      await loadAccounts();
+      await loadDataBounds();
+      restoreAccountFilter();
+      await loadInstruments();
+      restoreInstrumentFilter();
+      restorePnlToggles();
+      restoreGlobalTimeframe();
+  restoreLossPatternSettings();
+      await loadAll();
+    })
+    .catch(console.error);
+}
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "trade-health-tracker",
+  "version": "1.0.0",
+  "description": "Multi-exchange futures trade PNL/health tracker (Gate.io first)",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0"
+  }
+}

@@ -279,6 +279,37 @@ if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
   Chart.register(ChartDataLabels);
   Chart.defaults.plugins.datalabels = { display: false };
 }
+
+// 카운트 히스토그램용 제곱근(sqrt) y축. 로그축은 막대에 "0 바닥"이 없어(log0=-∞) 카운트 1개가
+// 붕 떠 보이는데, sqrt는 0이 진짜 바닥이라 적은 카운트는 아래에 붙고 큰 카운트는 눌린다.
+// (로그의 밑은 모양에 영향 없음 — 축이 min~max로 정규화되며 상쇄되므로.)
+// LogarithmicScale과 같은 패턴으로 getPixelForValue/getValueForPixel만 갈아끼움.
+// 등록 실패 시 HIST_Y_TYPE이 'linear'로 남아 안전하게 폴백.
+let HIST_Y_TYPE = 'linear';
+try {
+  if (typeof Chart !== 'undefined' && Chart.LinearScale) {
+    class SqrtScale extends Chart.LinearScale {
+      getPixelForValue(value) {
+        const smin = Math.sqrt(Math.max(0, this.min));
+        const smax = Math.sqrt(Math.max(0, this.max));
+        const s = Math.sqrt(Math.max(0, value == null || isNaN(value) ? 0 : value));
+        const decimal = smax === smin ? 0 : (s - smin) / (smax - smin);
+        return this.getPixelForDecimal(decimal);
+      }
+      getValueForPixel(pixel) {
+        const smin = Math.sqrt(Math.max(0, this.min));
+        const smax = Math.sqrt(Math.max(0, this.max));
+        const s = smin + this.getDecimalForPixel(pixel) * (smax - smin);
+        return s * s;
+      }
+    }
+    SqrtScale.id = 'sqrt';
+    SqrtScale.defaults = Chart.LinearScale.defaults;
+    Chart.register(SqrtScale);
+    HIST_Y_TYPE = 'sqrt';
+  }
+} catch (e) { console.warn('sqrt scale 등록 실패 — linear로 폴백', e); HIST_Y_TYPE = 'linear'; }
+
 const charts = {};
 const fmt = (v, d=4) => Number(v||0).toFixed(d);
 const fmtPnl = (v, d=4) => { const n = Number(v||0); const s = n.toFixed(d); return `<span class="${n>=0?'pos':'neg'}">${n>=0?'+':''}${s}</span>`; };
@@ -776,9 +807,10 @@ function renderHistogram(id, points, valueOf, labelFmt, winOf = p => p.win) {
       plugins: { legend: { labels: { color: '#6b7280' } } },
       scales: {
         x: { stacked: true, ticks: { color: '#4b5563', maxTicksLimit: 15 }, grid: { color: '#9ca3af80' } },
-        // 로그 스케일 — bin이 잘아지면 카운트 적은 구간이 많아지는데, 선형이면 큰 막대에 눌려
-        // 안 보임. 로그로 하면 1·2개짜리 꼬리도 드러남. (log는 0을 못 그려서 beginAtZero 제거)
-        y: { stacked: true, type: 'logarithmic', ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
+        // sqrt 스케일 — bin이 잘아지면 카운트 적은 구간이 많은데, 선형이면 큰 막대에 눌려 안 보임.
+        // sqrt는 0이 진짜 바닥이라 1·2개짜리 꼬리도 드러나면서 큰 막대는 압축된다(로그의 "1개 붕 뜸"
+        // 아티팩트 없음). 등록 실패 시 HIST_Y_TYPE이 linear라 그대로 동작.
+        y: { stacked: true, type: HIST_Y_TYPE, min: 0, ticks: { color: '#4b5563' }, grid: { color: '#9ca3af80' } },
       },
     },
   });

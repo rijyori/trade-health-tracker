@@ -200,7 +200,7 @@
     <canvas id="chartReturnHist"></canvas>
   </div>
   <div class="chart-box">
-    <h3>Holding Time Distribution</h3>
+    <h3>RPH Distribution <span style="color:var(--dim);font-size:0.72rem;font-weight:400">(return per hour, $/h)</span></h3>
     <canvas id="chartHoldHist"></canvas>
   </div>
 </div>
@@ -549,7 +549,7 @@ function rerenderLossPattern() {
   renderLossPatternChart(lastCloses);
   renderHoldTimeChart(lastCloses);
   renderReturnHistChart(lastCloses);
-  renderHoldHistChart(lastCloses);
+  renderRphHistChart(lastCloses);
   renderNetPnlHistChart(lastCloses);
   renderExpectedPnlHistChart(lastCloses);
 }
@@ -854,10 +854,13 @@ function renderReturnHistChart(closes) {
   renderHistogram('chartReturnHist', points, p => p.returnPct, v => v.toFixed(1) + '%');
 }
 
-function renderHoldHistChart(closes) {
+// RPH(시간당 수익, $/h) 분포 — 산점도의 RPH 대각선에 대응하는 1D 버전.
+// rph는 음수(손실)·비유한(보유시간 0)이 가능하므로 선형 binning + 비유한 제외.
+function renderRphHistChart(closes) {
   const minPnl = rangeMin('minPnlAll'), maxPnl = rangeMax('maxPnlAll');
-  const points = allClosePoints(closes).filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl);
-  renderHistogram('chartHoldHist', points, p => p.holdH, v => fmtHours(v), p => p.win, HOLD_POWER);
+  const points = allClosePoints(closes)
+    .filter(p => Math.abs(p.y) >= minPnl && Math.abs(p.y) <= maxPnl && Number.isFinite(p.rph));
+  renderHistogram('chartHoldHist', points, p => p.rph, v => fmt(v, 1) + '/h');
 }
 
 // Net PNL(수수료 차감) 분포. 승/패는 net 부호 기준.
